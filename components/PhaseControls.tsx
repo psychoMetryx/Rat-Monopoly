@@ -24,11 +24,17 @@ export function PhaseControls({
   cpuActive
 }: PhaseControlsProps) {
   const disabled = state.status.state === "over" || cpuActive;
+  const startTurnReady = state.phase === "after-effects" || state.phase === "pre-move";
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-      <button onClick={onBegin} disabled={disabled} style={buttonStyle}>
+      <button onClick={onBegin} disabled={disabled || !startTurnReady} style={buttonStyle}>
         Start Turn
       </button>
+      {!startTurnReady && !disabled && (
+        <span style={{ fontSize: 12, color: "#fca5a5" }}>
+          Finish the current phase to begin the next turn.
+        </span>
+      )}
       <button onClick={onFinishPreMove} disabled={disabled || state.phase !== "pre-move"} style={buttonStyle}>
         Finish Pre-move
       </button>

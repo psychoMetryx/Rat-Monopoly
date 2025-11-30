@@ -361,6 +361,7 @@ function movePlayerOnBoard(state: GameState): GameState {
 
 export function beginPreMove(state: GameState): GameState {
   if (state.status.state === "over") return state;
+  if (state.phase !== "after-effects" && state.phase !== "pre-move") return state;
   return { ...state, phase: "pre-move", lastRoll: undefined };
 }
 
