@@ -7,12 +7,27 @@ const surfaceBoard: BoardDefinition = {
   spaces: [
     { id: "go", name: "GO / Lotto", type: "go", rubbyDelta: 200 },
     { id: "church", name: "Church", type: "church", indulgenceCost: 300 },
-    { id: "tax", name: "Tax Office", type: "tax", rubbyDelta: -150 },
-    { id: "property-a", name: "Trash Palace", type: "property", rubbyDelta: -220 },
+    {
+      id: "tax",
+      name: "Tax Office",
+      type: "property",
+      property: { price: 300, rent: 75, taxOfficeMultiplier: 4 }
+    },
+    {
+      id: "property-a",
+      name: "Trash Palace",
+      type: "property",
+      property: { price: 220, rent: 60 }
+    },
     { id: "draw-1", name: "Sniff a Card", type: "draw", cardDraw: true },
     { id: "job", name: "Job Board", type: "job", rubbyDelta: 100 },
     { id: "hell-gate", name: "Hell Gate", type: "hell-gate", sendTo: { boardId: "hell", index: 0 } },
-    { id: "property-b", name: "Roach District", type: "property", rubbyDelta: -180 },
+    {
+      id: "property-b",
+      name: "Roach District",
+      type: "property",
+      property: { price: 180, rent: 45 }
+    },
     { id: "draw-2", name: "Rat Lotto", type: "draw", cardDraw: true },
     { id: "teleport", name: "Subsewer Exit", type: "teleport", sendTo: { boardId: "subsurface", index: 0 } }
   ]
@@ -24,7 +39,12 @@ const subsewerBoard: BoardDefinition = {
   kind: "subsurface",
   spaces: [
     { id: "entry", name: "Subsewer Gate", type: "blank" },
-    { id: "property-c", name: "Pipe Palace", type: "property", rubbyDelta: -120 },
+    {
+      id: "property-c",
+      name: "Pipe Palace",
+      type: "property",
+      property: { price: 120, rent: 30 }
+    },
     { id: "tax-2", name: "Flooded Toll", type: "tax", rubbyDelta: -100 },
     { id: "draw-3", name: "Scrap Stash", type: "draw", cardDraw: true },
     { id: "exit", name: "Exit to GO", type: "teleport", sendTo: { boardId: "surface", index: 0 } }
@@ -84,7 +104,9 @@ function buildPlayers(names: string[], startingBoard: BoardDefinition): PlayerSt
     spaceIndex: 0,
     jobProtected: false,
     hellEscapes: 0,
-    inHell: false
+    inHell: false,
+    ownedProperties: [],
+    propertyMetadata: {}
   }));
 }
 
