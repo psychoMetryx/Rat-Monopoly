@@ -52,6 +52,11 @@ function collectJackpot(state: GameState, amount: number): GameState {
   return appendLog({ ...state, jackpot: Math.max(0, state.jackpot + amount) }, `Jackpot changed by ${amount}.`);
 }
 
+function startGoLotto(state: GameState): GameState {
+  const next: GameState = { ...state, goLotto: { status: "choose" }, phase: "go-lotto" };
+  return appendLog(next, `${currentPlayer(next).name} reached GO and must choose a payout or lotto call.`);
+}
+
 function advanceToNextPlayer(state: GameState): GameState {
   const living = state.players.filter((p) => p.alive);
   if (living.length === 0) {
@@ -120,6 +125,9 @@ function drawCard(state: GameState): GameState {
 
 function resolveSpaceEffect(state: GameState, space: BoardSpace): GameState {
   let next = state;
+  if (space.type === "go") {
+    return startGoLotto(state);
+  }
   if (space.rubbyDelta) {
     next = updatePlayer(next, (player) => ({ ...player, rubbies: Math.max(0, player.rubbies + space.rubbyDelta!) }));
     if (space.rubbyDelta < 0) {
@@ -234,9 +242,52 @@ export function resolveCurrentSpace(state: GameState): GameState {
   const board = getBoard(state, player.boardId);
   const space = board.spaces[player.spaceIndex];
   const resolved = resolveSpaceEffect(state, space);
-  const withLog = appendLog(resolved, `${player.name} resolved ${space.name}.`);
+  const withLog =
+    resolved.phase === "go-lotto"
+      ? resolved
+      : appendLog(resolved, `${player.name} resolved ${space.name}.`);
+  if (withLog.phase === "go-lotto") {
+    return withLog;
+  }
   const checked = checkWinConditions(withLog);
   return { ...checked, phase: checked.status.state === "over" ? "game-over" : "after-effects" };
+}
+
+export function takeGoPayout(state: GameState): GameState {
+  if (state.status.state === "over") return state;
+  if (state.phase !== "go-lotto" || state.goLotto?.status !== "choose") return state;
+  let next = updatePlayer(state, (player) => ({ ...player, rubbies: player.rubbies + 200 }));
+  next = appendLog(next, `${currentPlayer(next).name} took 200 rubbies from GO.`);
+  next = { ...next, goLotto: undefined };
+  next = checkWinConditions(next);
+  return { ...next, phase: next.status.state === "over" ? "game-over" : "after-effects" };
+}
+
+export function placeGoWager(state: GameState, calledFace: number): GameState {
+  if (state.status.state === "over") return state;
+  if (state.phase !== "go-lotto" || state.goLotto?.status !== "choose") return state;
+  const face = Math.max(1, Math.min(6, Math.round(calledFace)));
+  let next = collectJackpot(state, 200);
+  next = appendLog(next, `${currentPlayer(next).name} wagered GO payout on rolling a ${face}.`);
+  return { ...next, goLotto: { status: "awaiting-roll", calledFace: face }, phase: "go-lotto-roll" };
+}
+
+export function resolveGoLottoRoll(state: GameState, roll: number): GameState {
+  if (state.status.state === "over") return state;
+  if (state.phase !== "go-lotto-roll" || state.goLotto?.status !== "awaiting-roll") return state;
+  const calledFace = state.goLotto.calledFace ?? 0;
+  let next = appendLog(state, `${currentPlayer(state).name} rolled a ${roll} for the GO lotto (called ${calledFace}).`);
+  if (roll === calledFace) {
+    const payout = state.jackpot;
+    next = updatePlayer(next, (player) => ({ ...player, rubbies: player.rubbies + payout }));
+    next = collectJackpot(next, -payout);
+    next = appendLog(next, `${currentPlayer(next).name} hit the jackpot for ${payout} rubbies!`);
+  } else {
+    next = appendLog(next, `${currentPlayer(next).name} missed the jackpot.`);
+  }
+  next = { ...next, goLotto: undefined };
+  next = checkWinConditions(next);
+  return { ...next, phase: next.status.state === "over" ? "game-over" : "after-effects" };
 }
 
 export function applyAfterEffects(state: GameState): GameState {

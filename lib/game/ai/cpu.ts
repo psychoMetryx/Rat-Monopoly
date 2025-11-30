@@ -5,7 +5,10 @@ import {
   finishPreMove,
   recordRoll,
   resolveCurrentSpace,
-  resolveHellEscape
+  resolveGoLottoRoll,
+  resolveHellEscape,
+  takeGoPayout,
+  placeGoWager
 } from "../reducers";
 import { BoardSpace, GameState, PlayerState } from "../types";
 
@@ -16,6 +19,9 @@ export type CpuActionKind =
   | "roll"
   | "move"
   | "resolve"
+  | "go-payout"
+  | "go-wager"
+  | "go-roll"
   | "after-effects";
 
 export interface CpuDecision {
@@ -23,6 +29,7 @@ export interface CpuDecision {
   roll?: number;
   surviveFiringSquad?: boolean;
   lottoCall?: "aggressive" | "conservative";
+  calledFace?: number;
   buyIndulgence?: boolean;
   debtRepayment?: number;
   auctionBid?: number;
@@ -139,6 +146,21 @@ export function decideCpuAction(state: GameState): CpuDecision {
       auctionBid: player.rubbies > 300 ? Math.min(200, Math.floor(player.rubbies * 0.25)) : 0
     };
   }
+  if (state.phase === "go-lotto") {
+    const risk = planLottoRisk(state);
+    const calledFace = Math.floor(Math.random() * 6) + 1;
+    if (risk === "aggressive" || state.jackpot >= 200) {
+      notes.push("Gambling GO payout on lotto", `Calling ${calledFace}`);
+      return { kind: "go-wager", notes, calledFace };
+    }
+    notes.push("Taking safe 200 rubbies from GO");
+    return { kind: "go-payout", notes };
+  }
+  if (state.phase === "go-lotto-roll") {
+    const roll = Math.floor(Math.random() * 6) + 1;
+    notes.push("Rolling for GO lotto jackpot");
+    return { kind: "go-roll", roll, notes };
+  }
   if (state.phase === "after-effects") {
     notes.push("Wrapping up turn");
     return { kind: "after-effects", notes };
@@ -169,6 +191,12 @@ export function applyCpuDecision(state: GameState, decision: CpuDecision): GameS
       return applyMovement(baseState);
     case "resolve":
       return resolveCurrentSpace(baseState);
+    case "go-payout":
+      return takeGoPayout(baseState);
+    case "go-wager":
+      return placeGoWager(baseState, decision.calledFace ?? Math.floor(Math.random() * 6) + 1);
+    case "go-roll":
+      return resolveGoLottoRoll(baseState, decision.roll ?? Math.floor(Math.random() * 6) + 1);
     case "after-effects":
       return applyAfterEffects(baseState);
     default:

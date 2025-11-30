@@ -28,6 +28,11 @@ export interface BoardDefinition {
   spaces: BoardSpace[];
 }
 
+export interface GoLottoState {
+  status: "choose" | "awaiting-roll";
+  calledFace?: number;
+}
+
 export type CardKind = "indulgence" | "cash" | "penalty" | "move" | "hell";
 
 export interface CardDefinition {
@@ -58,6 +63,8 @@ export type TurnPhase =
   | "roll"
   | "move"
   | "resolve"
+  | "go-lotto"
+  | "go-lotto-roll"
   | "after-effects"
   | "game-over";
 
@@ -79,6 +86,7 @@ export interface GameState {
   phase: TurnPhase;
   lastRoll?: number;
   jackpot: number;
+  goLotto?: GoLottoState;
   log: string[];
   status: GameStatus;
   pendingCard?: CardDefinition;
