@@ -77,7 +77,7 @@ function buildPlayers(names: string[], startingBoard: BoardDefinition): PlayerSt
   return names.map((name, index) => ({
     id: `player-${index + 1}`,
     name,
-    rubbies: 300,
+    rubbies: 800,
     indulgences: 0,
     alive: true,
     boardId: startingBoard.id,
