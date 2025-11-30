@@ -78,6 +78,12 @@ function appendLog(state: GameState, message: string): GameState {
   return { ...state, log: [...state.log, message] };
 }
 
+function spendIndulgence(state: GameState, message: string): GameState {
+  const player = currentPlayer(state);
+  const next = updatePlayer(state, (p) => ({ ...p, indulgences: Math.max(0, p.indulgences - 1) }));
+  return appendLog(next, message.replace("{player}", player.name));
+}
+
 function pushCardToDiscard(state: GameState, card: CardDefinition): GameState {
   return { ...state, discard: [...state.discard, card] };
 }
@@ -145,14 +151,19 @@ function resolveCardEffect(state: GameState, card: CardDefinition): GameState {
     next = updatePlayer(next, (player) => ({ ...player, boardId: card.moveTo!.boardId, spaceIndex: card.moveTo!.index }));
   }
   if (card.sendToHell) {
-    next = updatePlayer(next, (player) => ({
-      ...player,
-      boardId: "hell",
-      spaceIndex: 0,
-      inHell: true,
-      hellEscapes: 0,
-      jobProtected: false
-    }));
+    const player = currentPlayer(next);
+    if (player.indulgences > 0) {
+      next = spendIndulgence(next, `${player.name} spent an indulgence to avoid being dragged to hell.`);
+    } else {
+      next = updatePlayer(next, (p) => ({
+        ...p,
+        boardId: "hell",
+        spaceIndex: 0,
+        inHell: true,
+        hellEscapes: 0,
+        jobProtected: false
+      }));
+    }
   }
   next = pushCardToDiscard(next, card);
   return appendLog(next, `Card resolved: ${card.description}`);
@@ -255,15 +266,20 @@ function resolveSpaceEffect(state: GameState, space: BoardSpace): GameState {
     next = updatePlayer(next, (player) => ({ ...player, jobProtected: true }));
   }
   if (space.type === "hell-gate") {
-    next = updatePlayer(next, (player) => ({
-      ...player,
-      boardId: "hell",
-      spaceIndex: 0,
-      inHell: true,
-      hellEscapes: 0,
-      jobProtected: false
-    }));
-    next = appendLog(next, `${currentPlayer(next).name} was dragged to hell.`);
+    const player = currentPlayer(next);
+    if (player.indulgences > 0) {
+      next = spendIndulgence(next, `${player.name} spent an indulgence to avoid hell entry.`);
+    } else {
+      next = updatePlayer(next, (p) => ({
+        ...p,
+        boardId: "hell",
+        spaceIndex: 0,
+        inHell: true,
+        hellEscapes: 0,
+        jobProtected: false
+      }));
+      next = appendLog(next, `${currentPlayer(next).name} was dragged to hell.`);
+    }
   }
   if (space.sendTo) {
     next = updatePlayer(next, (player) => ({ ...player, boardId: space.sendTo!.boardId, spaceIndex: space.sendTo!.index }));
@@ -299,22 +315,33 @@ export function finishPreMove(state: GameState): GameState {
 
 export function resolveHellEscape(state: GameState, roll: number, firingSquadHeads?: boolean): GameState {
   if (state.status.state === "over") return state;
+  const player = currentPlayer(state);
+
+  if (player.indulgences > 0) {
+    let next = spendIndulgence(state, `${player.name} spent an indulgence to escape hell immediately.`);
+    next = updatePlayer(next, (p) => ({ ...p, inHell: false, hellEscapes: 0 }));
+    return { ...next, phase: "roll" };
+  }
+
   const priorAttempts = currentPlayer(state).hellEscapes;
   const attempt = priorAttempts + 1;
   let next = updatePlayer(state, (player) => ({ ...player, hellEscapes: attempt }));
-  const player = currentPlayer(next);
+  const playerAfterAttempt = currentPlayer(next);
 
   const requiredRoll = attempt === 1 ? 6 : attempt === 2 ? 5 : 4;
   const escapeSucceeded = roll >= requiredRoll;
 
   if (escapeSucceeded) {
     next = updatePlayer(next, (p) => ({ ...p, inHell: false, hellEscapes: 0 }));
-    next = appendLog(next, `${player.name} escaped hell on attempt ${attempt} with a roll of ${roll} (needed ${requiredRoll}+).`);
+    next = appendLog(
+      next,
+      `${playerAfterAttempt.name} escaped hell on attempt ${attempt} with a roll of ${roll} (needed ${requiredRoll}+).`
+    );
     return { ...next, phase: "roll" };
   }
 
   if (attempt >= 4) {
-    next = appendLog(next, `${player.name} failed a fourth hell escape (roll ${roll}) and faces the firing squad.`);
+    next = appendLog(next, `${playerAfterAttempt.name} failed a fourth hell escape (roll ${roll}) and faces the firing squad.`);
     const survives = firingSquadHeads ?? false;
     if (!survives) {
       const playerRubbies = currentPlayer(next).rubbies;
@@ -328,16 +355,19 @@ export function resolveHellEscape(state: GameState, roll: number, firingSquadHea
           indulgencesLost === 1 ? "" : "s"
         }.`
       );
-      next = appendLog(next, `${player.name} was executed in hell.`);
+      next = appendLog(next, `${playerAfterAttempt.name} was executed in hell.`);
       next = checkWinConditions(next);
       return { ...next, phase: next.status.state === "over" ? "game-over" : "after-effects" };
     }
-    next = appendLog(next, `${player.name} survived the firing squad coin flip and returns to GO.`);
+    next = appendLog(next, `${playerAfterAttempt.name} survived the firing squad coin flip and returns to GO.`);
     next = updatePlayer(next, (p) => ({ ...p, boardId: "surface", spaceIndex: 0, inHell: false, hellEscapes: 0 }));
     return { ...next, phase: "after-effects" };
   }
 
-  next = appendLog(next, `${player.name} failed hell escape attempt ${attempt} with a roll of ${roll} (needed ${requiredRoll}+).`);
+  next = appendLog(
+    next,
+    `${playerAfterAttempt.name} failed hell escape attempt ${attempt} with a roll of ${roll} (needed ${requiredRoll}+).`
+  );
   return { ...next, phase: "after-effects" };
 }
 
