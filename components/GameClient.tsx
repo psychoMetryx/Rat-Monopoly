@@ -16,7 +16,9 @@ import {
   decideCpuAction,
   describeCpuRole,
   placeGoWager,
-  takeGoPayout
+  takeGoPayout,
+  buyPendingProperty,
+  declinePendingProperty
 } from "@/lib/game";
 import { PhaseControls } from "./PhaseControls";
 import { PlayerPanel } from "./PlayerPanel";
@@ -165,6 +167,8 @@ export function GameClient() {
               onMove={() => updateState(applyMovement)}
               onResolve={() => updateState(resolveCurrentSpace)}
               onAfter={() => updateState(applyAfterEffects)}
+              onBuyProperty={() => updateState(buyPendingProperty)}
+              onDeclineProperty={() => updateState(declinePendingProperty)}
               cpuActive={cpuPlayerIds.has(activePlayer.id)}
             />
             {(state.phase === "go-lotto" || state.phase === "go-lotto-roll") && (

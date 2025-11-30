@@ -9,6 +9,8 @@ interface PhaseControlsProps {
   onMove: () => void;
   onResolve: () => void;
   onAfter: () => void;
+  onBuyProperty: () => void;
+  onDeclineProperty: () => void;
   cpuActive?: boolean;
 }
 
@@ -21,10 +23,13 @@ export function PhaseControls({
   onMove,
   onResolve,
   onAfter,
+  onBuyProperty,
+  onDeclineProperty,
   cpuActive
 }: PhaseControlsProps) {
   const disabled = state.status.state === "over" || cpuActive;
   const startTurnReady = state.phase === "after-effects" || state.phase === "pre-move";
+  const canDecideProperty = state.phase === "property-decision" && Boolean(state.propertyDecision);
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
       <button onClick={onBegin} disabled={disabled || !startTurnReady} style={buttonStyle}>
@@ -50,6 +55,23 @@ export function PhaseControls({
       <button onClick={onResolve} disabled={disabled || state.phase !== "resolve"} style={buttonStyle}>
         Resolve Space
       </button>
+      {canDecideProperty && state.propertyDecision && (
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+          <span>
+            Buy {state.propertyDecision.spaceName} for {state.propertyDecision.price} rubbies?
+          </span>
+          <button onClick={onBuyProperty} disabled={disabled} style={{ ...buttonStyle, background: "#22d3ee" }}>
+            Buy
+          </button>
+          <button
+            onClick={onDeclineProperty}
+            disabled={disabled}
+            style={{ ...buttonStyle, background: "#fca5a5" }}
+          >
+            Decline / Auction
+          </button>
+        </div>
+      )}
       <button onClick={onAfter} disabled={disabled || state.phase !== "after-effects"} style={buttonStyle}>
         After-effects
       </button>

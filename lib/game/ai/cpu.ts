@@ -5,6 +5,8 @@ import {
   finishPreMove,
   recordRoll,
   resolveCurrentSpace,
+  buyPendingProperty,
+  declinePendingProperty,
   resolveGoLottoRoll,
   resolveHellEscape,
   takeGoPayout,
@@ -18,6 +20,8 @@ export type CpuActionKind =
   | "hell-escape"
   | "roll"
   | "move"
+  | "property-buy"
+  | "property-decline"
   | "resolve"
   | "go-payout"
   | "go-wager"
@@ -103,6 +107,24 @@ function planDebtRepayment(player: PlayerState): number {
   return Math.floor(player.rubbies * 0.2);
 }
 
+function shouldBuyProperty(player: PlayerState, space: BoardSpace): { buy: boolean; note: string } {
+  if (!space.property) return { buy: false, note: "No property to purchase" };
+  const price = space.property.price;
+  if (player.rubbies < price) return { buy: false, note: "Insufficient rubbies" };
+  const remaining = player.rubbies - price;
+  const potentialRent = space.property.rent * (space.property.taxOfficeMultiplier ?? 1);
+  if (remaining >= 500) {
+    return { buy: true, note: "Plenty of cushion after purchase" };
+  }
+  if (remaining < 100) {
+    return { buy: false, note: "Preserving safety buffer" };
+  }
+  const rentRatio = potentialRent / price;
+  const buy = rentRatio >= 0.25 || remaining >= 200;
+  const note = buy ? `Rent ratio ${(rentRatio * 100).toFixed(0)}% supports purchase` : "Keeping cash for hazards";
+  return { buy, note };
+}
+
 function planLottoRisk(state: GameState): "aggressive" | "conservative" {
   if (state.jackpot >= 400) return "aggressive";
   return "conservative";
@@ -129,6 +151,13 @@ export function decideCpuAction(state: GameState): CpuDecision {
   if (state.phase === "move") {
     notes.push("Advance to landing space");
     return { kind: "move", notes };
+  }
+  if (state.phase === "property-decision" && state.propertyDecision) {
+    const board = state.boards.find((b) => b.id === state.propertyDecision?.boardId);
+    const space = board?.spaces.find((s) => s.id === state.propertyDecision?.spaceId);
+    const { buy, note } = space ? shouldBuyProperty(player, space) : { buy: false, note: "Missing space info" };
+    notes.push("Evaluating property purchase", note);
+    return { kind: buy ? "property-buy" : "property-decline", notes };
   }
   if (state.phase === "resolve") {
     const board = state.boards.find((b) => b.id === player.boardId);
@@ -193,6 +222,10 @@ export function applyCpuDecision(state: GameState, decision: CpuDecision): GameS
     }
     case "move":
       return applyMovement(baseState);
+    case "property-buy":
+      return buyPendingProperty(baseState);
+    case "property-decline":
+      return declinePendingProperty(baseState);
     case "resolve":
       return resolveCurrentSpace(baseState);
     case "go-payout":
