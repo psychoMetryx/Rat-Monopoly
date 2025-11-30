@@ -74,6 +74,15 @@ function updatePlayer(state: GameState, updater: (player: PlayerState) => Player
   return next;
 }
 
+function shuffleCards(cards: CardDefinition[]): CardDefinition[] {
+  const shuffled = [...cards];
+  for (let i = shuffled.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
 function appendLog(state: GameState, message: string): GameState {
   return { ...state, log: [...state.log, message] };
 }
@@ -201,9 +210,13 @@ function resolveCardEffect(state: GameState, card: CardDefinition): GameState {
   return appendLog(next, `Card resolved: ${card.description}`);
 }
 
-function drawCard(state: GameState): GameState {
+function drawCard(state: GameState, options?: { shuffleDiscard?: boolean }): GameState {
   if (state.deck.length === 0) {
-    return appendLog(state, "Deck is empty; no card drawn.");
+    if (state.discard.length === 0) {
+      return appendLog(state, "Deck is empty; no card drawn.");
+    }
+    const rebuiltDeck = options?.shuffleDiscard ? shuffleCards(state.discard) : [...state.discard];
+    state = appendLog({ ...state, deck: rebuiltDeck, discard: [] }, "Deck rebuilt from discard pile.");
   }
   const [card, ...rest] = state.deck;
   const next: GameState = { ...state, deck: rest, pendingCard: card };
