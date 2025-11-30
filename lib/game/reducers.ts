@@ -29,6 +29,10 @@ function resetDeeds(player: PlayerState): PlayerState {
   return { ...player, ownedProperties: [], propertyMetadata: undefined };
 }
 
+function resetHoldings(player: PlayerState): PlayerState {
+  return { ...resetDeeds(player), indulgences: 0, rubbies: 0 };
+}
+
 function findPropertyOwner(state: GameState, propertyId: string): PlayerState | undefined {
   return state.players.find((player) => player.ownedProperties.includes(propertyId));
 }
@@ -36,8 +40,20 @@ function findPropertyOwner(state: GameState, propertyId: string): PlayerState | 
 function enforceBankruptcy(state: GameState, message?: string): GameState {
   const player = currentPlayer(state);
   if (player.rubbies > 0) return state;
-  const bankrupt = updatePlayer(state, (p) => ({ ...resetDeeds(p), rubbies: 0 }));
-  return appendLog(bankrupt, message ?? `${player.name} is bankrupt and returned all deeds to the bank.`);
+  const indulgencesLost = player.indulgences;
+  const forfeiture = player.rubbies;
+  const bankrupt = updatePlayer(state, (p) => resetHoldings(p));
+  const withPot = collectJackpot(bankrupt, forfeiture);
+  const withIndulgenceLog = appendLog(
+    withPot,
+    `${player.name} discarded ${indulgencesLost} indulgence${indulgencesLost === 1 ? "" : "s"}.`
+  );
+  const withMessage = appendLog(
+    withIndulgenceLog,
+    message ?? `${player.name} is bankrupt and returned all deeds to the bank. ${forfeiture} rubbies moved to the jackpot.`
+  );
+  const checked = checkWinConditions(withMessage);
+  return { ...checked, phase: checked.status.state === "over" ? "game-over" : state.phase };
 }
 
 function getBoard(state: GameState, boardId: string): BoardDefinition {
@@ -172,8 +188,18 @@ function resolvePropertyLanding(state: GameState, space: BoardSpace): GameState 
     const rentNote = multiplier > 1 ? ` (x${multiplier} tax office rate)` : "";
     next = appendLog(next, `${player.name} paid ${payment} rubbies to ${owner.name} for ${space.name}${rentNote}.`);
     if (payment < rentDue) {
-      next = updatePlayer(next, (p) => ({ ...resetDeeds(p), rubbies: 0 }));
+      const indulgencesLost = currentPlayer(next).indulgences;
+      const forfeiture = currentPlayer(next).rubbies;
+      next = updatePlayer(next, (p) => resetHoldings(p));
+      next = collectJackpot(next, forfeiture);
+      next = appendLog(
+        next,
+        `${player.name} discarded ${indulgencesLost} indulgence${indulgencesLost === 1 ? "" : "s"}.`
+      );
+      next = appendLog(next, `${player.name} moved ${forfeiture} rubbies to the jackpot upon bankruptcy.`);
       next = appendLog(next, `${player.name} went bankrupt on ${space.name} and returned all deeds to the bank.`);
+      next = checkWinConditions(next);
+      return { ...next, phase: next.status.state === "over" ? "game-over" : "after-effects" };
     }
     return next;
   }
@@ -291,9 +317,17 @@ export function resolveHellEscape(state: GameState, roll: number, firingSquadHea
     next = appendLog(next, `${player.name} failed a fourth hell escape (roll ${roll}) and faces the firing squad.`);
     const survives = firingSquadHeads ?? false;
     if (!survives) {
-      const forfeiture = currentPlayer(next).rubbies + 1000;
-      next = updatePlayer(next, (p) => ({ ...resetDeeds(p), alive: false, rubbies: 0 }));
+      const playerRubbies = currentPlayer(next).rubbies;
+      const indulgencesLost = currentPlayer(next).indulgences;
+      const forfeiture = playerRubbies + 1000;
+      next = updatePlayer(next, (p) => ({ ...resetHoldings(p), alive: false }));
       next = collectJackpot(next, forfeiture);
+      next = appendLog(
+        next,
+        `${player.name} forfeited ${forfeiture} rubbies to the jackpot and discarded ${indulgencesLost} indulgence${
+          indulgencesLost === 1 ? "" : "s"
+        }.`
+      );
       next = appendLog(next, `${player.name} was executed in hell.`);
       next = checkWinConditions(next);
       return { ...next, phase: next.status.state === "over" ? "game-over" : "after-effects" };
