@@ -20,6 +20,7 @@ import {
   buyPendingProperty,
   declinePendingProperty
 } from "@/lib/game";
+import { Board } from "./Board";
 import { PhaseControls } from "./PhaseControls";
 import { PlayerPanel } from "./PlayerPanel";
 
@@ -147,6 +148,8 @@ export function GameClient() {
           </div>
         </div>
       </header>
+
+      <Board state={state} />
 
       <section style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "1rem", alignItems: "start" }}>
         <div style={{ display: "grid", gap: "1rem" }}>
