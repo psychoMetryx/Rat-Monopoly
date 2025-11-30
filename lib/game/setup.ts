@@ -1,4 +1,5 @@
 import { BoardDefinition, CardDefinition, GameState, PlayerState } from "./types";
+import { shuffleCards } from "./utils";
 
 const surfaceBoard: BoardDefinition = {
   id: "surface",
@@ -125,11 +126,11 @@ function buildPlayers(names: string[], startingBoard: BoardDefinition): PlayerSt
   }));
 }
 
-export function createInitialGameState(names: string[]): GameState {
+export function createInitialGameState(names: string[], options?: { rng?: () => number }): GameState {
   const boards = [surfaceBoard, subsewerBoard, hellBoard];
   return {
     boards,
-    deck: defaultDeck,
+    deck: shuffleCards(defaultDeck, options?.rng),
     discard: [],
     currentPlayer: 0,
     phase: "pre-move",

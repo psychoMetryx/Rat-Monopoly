@@ -1,4 +1,5 @@
 import { createInitialGameState } from "./setup";
+import { shuffleCards } from "./utils";
 import {
   BoardDefinition,
   BoardSpace,
@@ -72,15 +73,6 @@ function updatePlayer(state: GameState, updater: (player: PlayerState) => Player
   const next = cloneState(state);
   next.players[next.currentPlayer] = updater(next.players[next.currentPlayer]);
   return next;
-}
-
-function shuffleCards(cards: CardDefinition[]): CardDefinition[] {
-  const shuffled = [...cards];
-  for (let i = shuffled.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return shuffled;
 }
 
 function appendLog(state: GameState, message: string): GameState {
@@ -210,12 +202,15 @@ function resolveCardEffect(state: GameState, card: CardDefinition): GameState {
   return appendLog(next, `Card resolved: ${card.description}`);
 }
 
-function drawCard(state: GameState, options?: { shuffleDiscard?: boolean }): GameState {
+type DrawCardOptions = { shuffleDiscard?: boolean; rng?: () => number };
+
+function drawCard(state: GameState, options?: DrawCardOptions): GameState {
   if (state.deck.length === 0) {
     if (state.discard.length === 0) {
       return appendLog(state, "Deck is empty; no card drawn.");
     }
-    const rebuiltDeck = options?.shuffleDiscard ? shuffleCards(state.discard) : [...state.discard];
+    const shouldShuffleDiscard = options?.shuffleDiscard ?? true;
+    const rebuiltDeck = shouldShuffleDiscard ? shuffleCards(state.discard, options?.rng) : [...state.discard];
     state = appendLog({ ...state, deck: rebuiltDeck, discard: [] }, "Deck rebuilt from discard pile.");
   }
   const [card, ...rest] = state.deck;
@@ -501,6 +496,6 @@ export function applyAfterEffects(state: GameState): GameState {
   return appendLog(advanced, `Turn passes to ${currentPlayer(advanced).name}.`);
 }
 
-export function startNewSession(names: string[]): GameState {
-  return createInitialGameState(names);
+export function startNewSession(names: string[], options?: { rng?: () => number }): GameState {
+  return createInitialGameState(names, options);
 }
