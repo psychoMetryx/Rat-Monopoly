@@ -10,10 +10,13 @@ import {
   recordRoll,
   resolveCurrentSpace,
   resolveHellEscape,
+  resolveGoLottoRoll,
   startNewSession,
   applyCpuDecision,
   decideCpuAction,
-  describeCpuRole
+  describeCpuRole,
+  placeGoWager,
+  takeGoPayout
 } from "@/lib/game";
 import { PhaseControls } from "./PhaseControls";
 import { PlayerPanel } from "./PlayerPanel";
@@ -164,6 +167,50 @@ export function GameClient() {
               onAfter={() => updateState(applyAfterEffects)}
               cpuActive={cpuPlayerIds.has(activePlayer.id)}
             />
+            {(state.phase === "go-lotto" || state.phase === "go-lotto-roll") && (
+              <div style={{ marginTop: "1rem", padding: "0.75rem", borderRadius: 8, background: "#0f172a" }}>
+                <h3 style={{ marginTop: 0 }}>GO / Rat Lotto</h3>
+                <p style={{ marginTop: 0 }}>Jackpot: {state.jackpot}</p>
+                {state.phase === "go-lotto" && (
+                  <div style={{ display: "grid", gap: "0.5rem" }}>
+                    <button
+                      onClick={() => updateState(takeGoPayout)}
+                      disabled={cpuPlayerIds.has(activePlayer.id)}
+                      style={{ ...buttonStyle, background: "#22d3ee" }}
+                    >
+                      Take 200 rubbies
+                    </button>
+                    <div>
+                      Or wager the 200 on a die face:
+                      <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "0.5rem" }}>
+                        {[1, 2, 3, 4, 5, 6].map((face) => (
+                          <button
+                            key={face}
+                            onClick={() => updateState((prev) => placeGoWager(prev, face))}
+                            disabled={cpuPlayerIds.has(activePlayer.id)}
+                            style={{ ...buttonStyle, background: "#fef08a", color: "#0b0f1a" }}
+                          >
+                            Call {face}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {state.phase === "go-lotto-roll" && state.goLotto?.calledFace && (
+                  <div style={{ display: "grid", gap: "0.5rem" }}>
+                    <div>Called face: {state.goLotto.calledFace}</div>
+                    <button
+                      onClick={() => updateState((prev) => resolveGoLottoRoll(prev, rollDie()))}
+                      disabled={cpuPlayerIds.has(activePlayer.id)}
+                      style={{ ...buttonStyle, background: "#a5b4fc" }}
+                    >
+                      Roll for jackpot
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
             <div style={{ marginTop: "0.5rem" }}>
               <span style={{ fontWeight: 700 }}>Last roll:</span> {state.lastRoll ?? "n/a"}
             </div>
