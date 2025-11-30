@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   GameState,
   applyAfterEffects,
@@ -46,6 +46,8 @@ export function GameClient() {
   const [cpuPlayerIds, setCpuPlayerIds] = useState<Set<string>>(
     () => new Set(defaultPlayers.map((slot, index) => (slot.isCPU ? `player-${index + 1}` : null)).filter(Boolean) as string[])
   );
+  const [showCustomization, setShowCustomization] = useState(false);
+  const quickStartRef = useRef<HTMLButtonElement | null>(null);
 
   const activePlayer = useMemo(() => state.players[state.currentPlayer], [state]);
 
@@ -68,6 +70,22 @@ export function GameClient() {
     setCpuPlayerIds(newCpuIds);
     setState(newState);
   };
+
+  const handleQuickStart = () => {
+    const quickState = startNewSession(defaultPlayers.map((slot) => slot.name));
+    const quickCpuIds = new Set(
+      quickState.players
+        .filter((_, index) => defaultPlayers[index]?.isCPU ?? false)
+        .map((player) => player.id)
+    );
+    setPlayerSlots(defaultPlayers);
+    setCpuPlayerIds(quickCpuIds);
+    setState(quickState);
+  };
+
+  useEffect(() => {
+    quickStartRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     if (state.status.state === "over") return;
@@ -93,59 +111,91 @@ export function GameClient() {
 
   return (
     <div style={{ maxWidth: 1000, margin: "0 auto", padding: "2rem", display: "grid", gap: "1rem" }}>
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div>
-          <h1 style={{ margin: 0 }}>Rat Monopoly</h1>
-          <p style={{ margin: 0 }}>Phase: {state.phase}</p>
-          {state.status.state === "over" && state.status.winState && (
-            <p style={{ margin: 0, color: "#fca5a5" }}>
-              Winner: {state.status.winState.winnerId} ({state.status.winState.reason})
-            </p>
-          )}
+      <header style={{ display: "grid", gap: "1rem" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <h1 style={{ margin: 0 }}>Rat Monopoly</h1>
+            <p style={{ margin: 0 }}>Phase: {state.phase}</p>
+            {state.status.state === "over" && state.status.winState && (
+              <p style={{ margin: 0, color: "#fca5a5" }}>
+                Winner: {state.status.winState.winnerId} ({state.status.winState.reason})
+              </p>
+            )}
+          </div>
         </div>
-        <div style={{ display: "grid", gap: "0.5rem" }}>
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            <button onClick={() => addSlot(false)} style={{ ...buttonStyle, background: "#a5b4fc" }}>
-              Add Human
-            </button>
-            <button onClick={() => addSlot(true)} style={{ ...buttonStyle, background: "#86efac" }}>
-              Add CPU
-            </button>
-            <button onClick={handleStart} style={{ ...buttonStyle, background: "#22d3ee" }}>
-              Start Session
+        <div style={{ display: "grid", gap: "0.75rem" }}>
+          <div
+            style={{
+              padding: "1rem",
+              borderRadius: 12,
+              background: "linear-gradient(120deg, #22d3ee, #a5b4fc)",
+              color: "#0b0f1a",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: "1rem",
+              flexWrap: "wrap"
+            }}
+          >
+            <div>
+              <h2 style={{ margin: 0 }}>Quick start</h2>
+              <p style={{ margin: 0 }}>Launch immediately with the default crew of rats.</p>
+            </div>
+            <button ref={quickStartRef} onClick={handleQuickStart} style={primaryButtonStyle}>
+              Quick Start Game
             </button>
           </div>
-          <div style={{ display: "grid", gap: "0.5rem" }}>
-            {playerSlots.map((slot, index) => (
-              <div
-                key={index}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "2fr 1fr auto",
-                  alignItems: "center",
-                  gap: "0.5rem"
-                }}
-              >
-                <input
-                  aria-label={`Player ${index + 1} name`}
-                  value={slot.name}
-                  onChange={(event) => updateSlot(index, (prev) => ({ ...prev, name: event.target.value }))}
-                  style={{ padding: "0.5rem", borderRadius: 8, border: "1px solid var(--muted)" }}
-                />
-                <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                  <input
-                    type="checkbox"
-                    checked={slot.isCPU}
-                    onChange={(event) => updateSlot(index, (prev) => ({ ...prev, isCPU: event.target.checked }))}
-                  />
-                  CPU
-                </label>
-                <button onClick={() => removeSlot(index)} style={{ ...buttonStyle, background: "#fca5a5" }}>
-                  Remove
+          <details
+            open={showCustomization}
+            onToggle={(event) => setShowCustomization((event.target as HTMLDetailsElement).open)}
+            style={{ borderRadius: 12, background: "var(--muted)", padding: "1rem" }}
+          >
+            <summary style={{ cursor: "pointer", fontWeight: 700, outline: "none" }}>Customize players</summary>
+            <div style={{ display: "grid", gap: "0.5rem", marginTop: "0.75rem" }}>
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                <button onClick={() => addSlot(false)} style={{ ...buttonStyle, background: "#a5b4fc" }}>
+                  Add Human
+                </button>
+                <button onClick={() => addSlot(true)} style={{ ...buttonStyle, background: "#86efac" }}>
+                  Add CPU
+                </button>
+                <button onClick={handleStart} style={{ ...buttonStyle, background: "#22d3ee" }}>
+                  Start Custom Session
                 </button>
               </div>
-            ))}
-          </div>
+              <div style={{ display: "grid", gap: "0.5rem" }}>
+                {playerSlots.map((slot, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "2fr 1fr auto",
+                      alignItems: "center",
+                      gap: "0.5rem"
+                    }}
+                  >
+                    <input
+                      aria-label={`Player ${index + 1} name`}
+                      value={slot.name}
+                      onChange={(event) => updateSlot(index, (prev) => ({ ...prev, name: event.target.value }))}
+                      style={{ padding: "0.5rem", borderRadius: 8, border: "1px solid var(--muted)" }}
+                    />
+                    <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                      <input
+                        type="checkbox"
+                        checked={slot.isCPU}
+                        onChange={(event) => updateSlot(index, (prev) => ({ ...prev, isCPU: event.target.checked }))}
+                      />
+                      CPU
+                    </label>
+                    <button onClick={() => removeSlot(index)} style={{ ...buttonStyle, background: "#fca5a5" }}>
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </details>
         </div>
       </header>
 
@@ -254,4 +304,13 @@ const buttonStyle: React.CSSProperties = {
   background: "var(--accent)",
   color: "#0b0f1a",
   fontWeight: 700
+};
+
+const primaryButtonStyle: React.CSSProperties = {
+  ...buttonStyle,
+  padding: "0.75rem 1.25rem",
+  background: "#0ea5e9",
+  boxShadow: "0 10px 30px rgba(14,165,233,0.35)",
+  fontSize: "1.05rem",
+  border: "none"
 };
