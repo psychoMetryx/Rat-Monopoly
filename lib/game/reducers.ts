@@ -282,8 +282,13 @@ function resolveSpaceEffect(state: GameState, space: BoardSpace): GameState {
     }
   }
   if (space.sendTo) {
+    const destinationBoard = getBoard(next, space.sendTo.boardId);
+    const destinationSpace = destinationBoard.spaces[space.sendTo.index];
     next = updatePlayer(next, (player) => ({ ...player, boardId: space.sendTo!.boardId, spaceIndex: space.sendTo!.index }));
     next = appendLog(next, `${currentPlayer(next).name} warped to ${space.sendTo.boardId}.`);
+    if (destinationSpace?.type === "go") {
+      return startGoLotto(next);
+    }
   }
   return next;
 }
