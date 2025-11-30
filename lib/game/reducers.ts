@@ -30,7 +30,7 @@ function resetDeeds(player: PlayerState): PlayerState {
 }
 
 function resetHoldings(player: PlayerState): PlayerState {
-  return { ...resetDeeds(player), indulgences: 0, rubbies: 0 };
+  return { ...resetDeeds(player), indulgences: 0, rubbies: 0, mobDebt: false };
 }
 
 function findPropertyOwner(state: GameState, propertyId: string): PlayerState | undefined {
@@ -101,6 +101,31 @@ function collectJackpot(state: GameState, amount: number): GameState {
   return appendLog({ ...state, jackpot: Math.max(0, state.jackpot + amount) }, `Jackpot changed by ${amount}.`);
 }
 
+function handlePlayerDeath(state: GameState, options?: { cause?: string; jackpotBonus?: number }): GameState {
+  const player = currentPlayer(state);
+  const indulgencesLost = player.indulgences;
+  const forfeiture = Math.max(0, player.rubbies) + (options?.jackpotBonus ?? 0);
+  let next = updatePlayer(state, (p) => ({
+    ...resetHoldings(p),
+    alive: false,
+    inHell: false,
+    jobProtected: false,
+    mobDebt: false
+  }));
+  next = collectJackpot(next, forfeiture);
+  next = appendLog(
+    next,
+    `${player.name} forfeited ${forfeiture} rubbies to the jackpot and discarded ${indulgencesLost} indulgence${
+      indulgencesLost === 1 ? "" : "s"
+    }.`
+  );
+  if (options?.cause) {
+    next = appendLog(next, options.cause);
+  }
+  next = checkWinConditions(next);
+  return { ...next, phase: next.status.state === "over" ? "game-over" : "after-effects" };
+}
+
 function startGoLotto(state: GameState): GameState {
   const next: GameState = { ...state, goLotto: { status: "choose" }, phase: "go-lotto" };
   return appendLog(next, `${currentPlayer(next).name} reached GO and must choose a payout or lotto call.`);
@@ -146,6 +171,13 @@ function resolveCardEffect(state: GameState, card: CardDefinition): GameState {
   }
   if (card.kind === "indulgence") {
     next = updatePlayer(next, (player) => ({ ...player, indulgences: player.indulgences + 1 }));
+  }
+  if (card.mobDebt) {
+    next = updatePlayer(next, (player) => ({ ...player, mobDebt: true }));
+    next = appendLog(
+      next,
+      `${currentPlayer(next).name} now owes the rat mob and must pay 500 rubbies at a mob space to clear the debt.`
+    );
   }
   if (card.moveTo) {
     next = updatePlayer(next, (player) => ({ ...player, boardId: card.moveTo!.boardId, spaceIndex: card.moveTo!.index }));
@@ -238,11 +270,21 @@ function resolvePropertyLanding(state: GameState, space: BoardSpace): GameState 
 
 function resolveSpaceEffect(state: GameState, space: BoardSpace): GameState {
   let next = state;
+  let player = currentPlayer(next);
+  if (space.mobThreat && player.mobDebt) {
+    if (player.rubbies >= 500) {
+      next = updatePlayer(next, (p) => ({ ...p, rubbies: p.rubbies - 500, mobDebt: false }));
+      next = appendLog(next, `${player.name} paid 500 rubbies to clear rat mob debt at ${space.name}.`);
+    } else {
+      return handlePlayerDeath(next, { cause: `${player.name} was executed by the rat mob at ${space.name}.` });
+    }
+  }
+  player = currentPlayer(next);
   if (space.type === "go") {
-    return startGoLotto(state);
+    return startGoLotto(next);
   }
   if (space.type === "property") {
-    return resolvePropertyLanding(state, space);
+    return resolvePropertyLanding(next, space);
   }
   if (space.rubbyDelta) {
     next = updatePlayer(next, (player) => ({ ...player, rubbies: Math.max(0, player.rubbies + space.rubbyDelta!) }));
@@ -349,20 +391,8 @@ export function resolveHellEscape(state: GameState, roll: number, firingSquadHea
     next = appendLog(next, `${playerAfterAttempt.name} failed a fourth hell escape (roll ${roll}) and faces the firing squad.`);
     const survives = firingSquadHeads ?? false;
     if (!survives) {
-      const playerRubbies = currentPlayer(next).rubbies;
-      const indulgencesLost = currentPlayer(next).indulgences;
-      const forfeiture = playerRubbies + 1000;
-      next = updatePlayer(next, (p) => ({ ...resetHoldings(p), alive: false }));
-      next = collectJackpot(next, forfeiture);
-      next = appendLog(
-        next,
-        `${player.name} forfeited ${forfeiture} rubbies to the jackpot and discarded ${indulgencesLost} indulgence${
-          indulgencesLost === 1 ? "" : "s"
-        }.`
-      );
       next = appendLog(next, `${playerAfterAttempt.name} was executed in hell.`);
-      next = checkWinConditions(next);
-      return { ...next, phase: next.status.state === "over" ? "game-over" : "after-effects" };
+      return handlePlayerDeath(next, { jackpotBonus: 1000 });
     }
     next = appendLog(next, `${playerAfterAttempt.name} survived the firing squad coin flip and returns to GO.`);
     next = updatePlayer(next, (p) => ({ ...p, boardId: "surface", spaceIndex: 0, inHell: false, hellEscapes: 0 }));
