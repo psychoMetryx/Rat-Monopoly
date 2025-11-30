@@ -75,6 +75,7 @@ export type TurnPhase =
   | "roll"
   | "move"
   | "resolve"
+  | "property-decision"
   | "go-lotto"
   | "go-lotto-roll"
   | "after-effects"
@@ -96,6 +97,7 @@ export interface GameState {
   discard: CardDefinition[];
   currentPlayer: number;
   phase: TurnPhase;
+  propertyDecision?: { boardId: string; spaceId: string; spaceName: string; price: number };
   lastRoll?: number;
   jackpot: number;
   goLotto?: GoLottoState;

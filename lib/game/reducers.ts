@@ -220,21 +220,22 @@ function drawCard(state: GameState, options?: DrawCardOptions): GameState {
 
 function resolvePropertyLanding(state: GameState, space: BoardSpace): GameState {
   if (!space.property) return state;
-  const player = currentPlayer(state);
-  const owner = findPropertyOwner(state, space.id);
+  const baseState = state.propertyDecision ? { ...state, propertyDecision: undefined } : state;
+  const player = currentPlayer(baseState);
+  const owner = findPropertyOwner(baseState, space.id);
 
   if (owner && owner.id === player.id) {
-    return appendLog(state, `${player.name} already owns ${space.name}.`);
+    return appendLog(baseState, `${player.name} already owns ${space.name}.`);
   }
 
   if (owner && owner.id !== player.id) {
     if (player.jobProtected) {
-      return appendLog(state, `${player.name} is employed and skips rent on ${space.name}.`);
+      return appendLog(baseState, `${player.name} is employed and skips rent on ${space.name}.`);
     }
     const multiplier = space.property.taxOfficeMultiplier ?? 1;
     const rentDue = space.property.rent * multiplier;
     const payment = Math.min(player.rubbies, rentDue);
-    let next = updatePlayer(state, (p) => ({ ...p, rubbies: p.rubbies - payment }));
+    let next = updatePlayer(baseState, (p) => ({ ...p, rubbies: p.rubbies - payment }));
     next = updatePlayerById(next, owner.id, (p) => ({ ...p, rubbies: p.rubbies + payment }));
     const rentNote = multiplier > 1 ? ` (x${multiplier} tax office rate)` : "";
     next = appendLog(next, `${player.name} paid ${payment} rubbies to ${owner.name} for ${space.name}${rentNote}.`);
@@ -256,24 +257,24 @@ function resolvePropertyLanding(state: GameState, space: BoardSpace): GameState 
   }
 
   if (player.jobProtected) {
-    return appendLog(state, `${player.name} cannot buy ${space.name} while employed.`);
+    return appendLog(baseState, `${player.name} cannot buy ${space.name} while employed.`);
   }
 
   if (player.rubbies < space.property.price) {
-    return appendLog(state, `${player.name} cannot afford ${space.name} (cost ${space.property.price}).`);
+    return appendLog(baseState, `${player.name} cannot afford ${space.name} (cost ${space.property.price}).`);
   }
 
-  let purchased = updatePlayer(state, (p) => ({
-    ...p,
-    rubbies: p.rubbies - space.property!.price,
-    ownedProperties: Array.from(new Set([...(p.ownedProperties ?? []), space.id])),
-    propertyMetadata: {
-      ...(p.propertyMetadata ?? {}),
-      [space.id]: { purchasePrice: space.property!.price }
+  const next: GameState = {
+    ...baseState,
+    phase: "property-decision",
+    propertyDecision: {
+      boardId: player.boardId,
+      spaceId: space.id,
+      spaceName: space.name,
+      price: space.property.price
     }
-  }));
-  purchased = appendLog(purchased, `${player.name} bought ${space.name} for ${space.property.price} rubbies.`);
-  return purchased;
+  };
+  return appendLog(next, `${player.name} may buy ${space.name} for ${space.property.price} rubbies.`);
 }
 
 function resolveSpaceEffect(state: GameState, space: BoardSpace): GameState {
@@ -433,14 +434,59 @@ export function resolveCurrentSpace(state: GameState): GameState {
   const space = board.spaces[player.spaceIndex];
   const resolved = resolveSpaceEffect(state, space);
   const withLog =
-    resolved.phase === "go-lotto"
+    resolved.phase === "go-lotto" || resolved.phase === "property-decision"
       ? resolved
       : appendLog(resolved, `${player.name} resolved ${space.name}.`);
-  if (withLog.phase === "go-lotto") {
+  if (withLog.phase === "go-lotto" || withLog.phase === "property-decision") {
     return withLog;
   }
   const checked = checkWinConditions(withLog);
   return { ...checked, phase: checked.status.state === "over" ? "game-over" : "after-effects" };
+}
+
+export function buyPendingProperty(state: GameState): GameState {
+  if (state.status.state === "over") return state;
+  if (state.phase !== "property-decision" || !state.propertyDecision) return state;
+  const player = currentPlayer(state);
+  const board = getBoard(state, state.propertyDecision.boardId);
+  const space = board.spaces.find((s) => s.id === state.propertyDecision!.spaceId);
+  if (!space?.property) {
+    const cleared = { ...state, propertyDecision: undefined };
+    return appendLog(cleared, `${player.name} had no valid property to purchase.`);
+  }
+  if (player.rubbies < space.property.price) {
+    let next = appendLog(state, `${player.name} cannot afford ${space.name} (cost ${space.property.price}).`);
+    next = { ...next, propertyDecision: undefined };
+    next = checkWinConditions(next);
+    return { ...next, phase: next.status.state === "over" ? "game-over" : "after-effects" };
+  }
+
+  let purchased = updatePlayer(state, (p) => ({
+    ...p,
+    rubbies: p.rubbies - space.property!.price,
+    ownedProperties: Array.from(new Set([...(p.ownedProperties ?? []), space.id])),
+    propertyMetadata: {
+      ...(p.propertyMetadata ?? {}),
+      [space.id]: { purchasePrice: space.property!.price }
+    }
+  }));
+  purchased = appendLog(purchased, `${player.name} bought ${space.name} for ${space.property.price} rubbies.`);
+  purchased = { ...purchased, propertyDecision: undefined };
+  purchased = checkWinConditions(purchased);
+  return { ...purchased, phase: purchased.status.state === "over" ? "game-over" : "after-effects" };
+}
+
+export function declinePendingProperty(state: GameState): GameState {
+  if (state.status.state === "over") return state;
+  if (state.phase !== "property-decision" || !state.propertyDecision) return state;
+  const player = currentPlayer(state);
+  let next = appendLog(
+    state,
+    `${player.name} declined to buy ${state.propertyDecision.spaceName} for ${state.propertyDecision.price} rubbies; property goes to auction.`
+  );
+  next = { ...next, propertyDecision: undefined };
+  next = checkWinConditions(next);
+  return { ...next, phase: next.status.state === "over" ? "game-over" : "after-effects" };
 }
 
 export function takeGoPayout(state: GameState): GameState {
