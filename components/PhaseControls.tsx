@@ -9,6 +9,7 @@ interface PhaseControlsProps {
   onMove: () => void;
   onResolve: () => void;
   onAfter: () => void;
+  cpuActive?: boolean;
 }
 
 export function PhaseControls({
@@ -19,9 +20,10 @@ export function PhaseControls({
   onRoll,
   onMove,
   onResolve,
-  onAfter
+  onAfter,
+  cpuActive
 }: PhaseControlsProps) {
-  const disabled = state.status.state === "over";
+  const disabled = state.status.state === "over" || cpuActive;
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
       <button onClick={onBegin} disabled={disabled} style={buttonStyle}>
