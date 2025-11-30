@@ -13,6 +13,33 @@ function cloneState(state: GameState): GameState {
   return JSON.parse(JSON.stringify(state));
 }
 
+function updatePlayerById(
+  state: GameState,
+  playerId: string,
+  updater: (player: PlayerState) => PlayerState
+): GameState {
+  const index = state.players.findIndex((p) => p.id === playerId);
+  if (index === -1) return state;
+  const next = cloneState(state);
+  next.players[index] = updater(next.players[index]);
+  return next;
+}
+
+function resetDeeds(player: PlayerState): PlayerState {
+  return { ...player, ownedProperties: [], propertyMetadata: undefined };
+}
+
+function findPropertyOwner(state: GameState, propertyId: string): PlayerState | undefined {
+  return state.players.find((player) => player.ownedProperties.includes(propertyId));
+}
+
+function enforceBankruptcy(state: GameState, message?: string): GameState {
+  const player = currentPlayer(state);
+  if (player.rubbies > 0) return state;
+  const bankrupt = updatePlayer(state, (p) => ({ ...resetDeeds(p), rubbies: 0 }));
+  return appendLog(bankrupt, message ?? `${player.name} is bankrupt and returned all deeds to the bank.`);
+}
+
 function getBoard(state: GameState, boardId: string): BoardDefinition {
   const board = state.boards.find((b) => b.id === boardId);
   if (!board) {
@@ -93,6 +120,7 @@ function resolveCardEffect(state: GameState, card: CardDefinition): GameState {
   let next = state;
   if (card.rubbyDelta) {
     next = updatePlayer(next, (player) => ({ ...player, rubbies: Math.max(0, player.rubbies + card.rubbyDelta) }));
+    next = enforceBankruptcy(next);
   }
   if (card.kind === "indulgence") {
     next = updatePlayer(next, (player) => ({ ...player, indulgences: player.indulgences + 1 }));
@@ -123,16 +151,68 @@ function drawCard(state: GameState): GameState {
   return resolveCardEffect(next, card);
 }
 
+function resolvePropertyLanding(state: GameState, space: BoardSpace): GameState {
+  if (!space.property) return state;
+  const player = currentPlayer(state);
+  const owner = findPropertyOwner(state, space.id);
+
+  if (owner && owner.id === player.id) {
+    return appendLog(state, `${player.name} already owns ${space.name}.`);
+  }
+
+  if (owner && owner.id !== player.id) {
+    if (player.jobProtected) {
+      return appendLog(state, `${player.name} is employed and skips rent on ${space.name}.`);
+    }
+    const multiplier = space.property.taxOfficeMultiplier ?? 1;
+    const rentDue = space.property.rent * multiplier;
+    const payment = Math.min(player.rubbies, rentDue);
+    let next = updatePlayer(state, (p) => ({ ...p, rubbies: p.rubbies - payment }));
+    next = updatePlayerById(next, owner.id, (p) => ({ ...p, rubbies: p.rubbies + payment }));
+    const rentNote = multiplier > 1 ? ` (x${multiplier} tax office rate)` : "";
+    next = appendLog(next, `${player.name} paid ${payment} rubbies to ${owner.name} for ${space.name}${rentNote}.`);
+    if (payment < rentDue) {
+      next = updatePlayer(next, (p) => ({ ...resetDeeds(p), rubbies: 0 }));
+      next = appendLog(next, `${player.name} went bankrupt on ${space.name} and returned all deeds to the bank.`);
+    }
+    return next;
+  }
+
+  if (player.jobProtected) {
+    return appendLog(state, `${player.name} cannot buy ${space.name} while employed.`);
+  }
+
+  if (player.rubbies < space.property.price) {
+    return appendLog(state, `${player.name} cannot afford ${space.name} (cost ${space.property.price}).`);
+  }
+
+  let purchased = updatePlayer(state, (p) => ({
+    ...p,
+    rubbies: p.rubbies - space.property!.price,
+    ownedProperties: Array.from(new Set([...(p.ownedProperties ?? []), space.id])),
+    propertyMetadata: {
+      ...(p.propertyMetadata ?? {}),
+      [space.id]: { purchasePrice: space.property!.price }
+    }
+  }));
+  purchased = appendLog(purchased, `${player.name} bought ${space.name} for ${space.property.price} rubbies.`);
+  return purchased;
+}
+
 function resolveSpaceEffect(state: GameState, space: BoardSpace): GameState {
   let next = state;
   if (space.type === "go") {
     return startGoLotto(state);
+  }
+  if (space.type === "property") {
+    return resolvePropertyLanding(state, space);
   }
   if (space.rubbyDelta) {
     next = updatePlayer(next, (player) => ({ ...player, rubbies: Math.max(0, player.rubbies + space.rubbyDelta!) }));
     if (space.rubbyDelta < 0) {
       next = collectJackpot(next, Math.abs(space.rubbyDelta));
     }
+    next = enforceBankruptcy(next);
   }
   if (space.indulgenceCost) {
     next = updatePlayer(next, (player) => ({
@@ -140,6 +220,7 @@ function resolveSpaceEffect(state: GameState, space: BoardSpace): GameState {
       rubbies: Math.max(0, player.rubbies - space.indulgenceCost!),
       indulgences: player.indulgences + 1
     }));
+    next = enforceBankruptcy(next);
   }
   if (space.cardDraw) {
     next = drawCard(next);
@@ -210,8 +291,9 @@ export function resolveHellEscape(state: GameState, roll: number, firingSquadHea
     next = appendLog(next, `${player.name} failed a fourth hell escape (roll ${roll}) and faces the firing squad.`);
     const survives = firingSquadHeads ?? false;
     if (!survives) {
-      next = updatePlayer(next, (p) => ({ ...p, alive: false }));
-      next = collectJackpot(next, player.rubbies + 1000);
+      const forfeiture = currentPlayer(next).rubbies + 1000;
+      next = updatePlayer(next, (p) => ({ ...resetDeeds(p), alive: false, rubbies: 0 }));
+      next = collectJackpot(next, forfeiture);
       next = appendLog(next, `${player.name} was executed in hell.`);
       next = checkWinConditions(next);
       return { ...next, phase: next.status.state === "over" ? "game-over" : "after-effects" };

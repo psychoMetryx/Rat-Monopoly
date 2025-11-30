@@ -44,6 +44,10 @@ function evaluateSpaceDanger(space: BoardSpace): number {
   if (space.rubbyDelta && space.rubbyDelta < 0) {
     danger += Math.abs(space.rubbyDelta);
   }
+  if (space.type === "property" && space.property) {
+    const multiplier = space.property.taxOfficeMultiplier ?? 1;
+    danger += space.property.rent * multiplier;
+  }
   if (space.type === "tax") {
     danger += 120;
   }

@@ -11,6 +11,12 @@ export type BoardSpaceType =
   | "teleport"
   | "blank";
 
+export interface PropertyDetails {
+  price: number;
+  rent: number;
+  taxOfficeMultiplier?: number;
+}
+
 export interface BoardSpace {
   id: string;
   name: string;
@@ -19,6 +25,7 @@ export interface BoardSpace {
   cardDraw?: boolean;
   sendTo?: { boardId: string; index: number };
   indulgenceCost?: number;
+  property?: PropertyDetails;
 }
 
 export interface BoardDefinition {
@@ -55,6 +62,8 @@ export interface PlayerState {
   jobProtected: boolean;
   hellEscapes: number;
   inHell: boolean;
+  ownedProperties: string[];
+  propertyMetadata?: Record<string, { purchasePrice: number }>;
 }
 
 export type TurnPhase =
