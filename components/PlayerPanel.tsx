@@ -2,9 +2,10 @@ import { GameState } from "@/lib/game";
 
 interface PlayerPanelProps {
   state: GameState;
+  cpuPlayerIds?: Set<string>;
 }
 
-export function PlayerPanel({ state }: PlayerPanelProps) {
+export function PlayerPanel({ state, cpuPlayerIds }: PlayerPanelProps) {
   return (
     <div style={{ display: "grid", gap: "0.5rem" }}>
       {state.players.map((player) => (
@@ -17,7 +18,9 @@ export function PlayerPanel({ state }: PlayerPanelProps) {
             border: `2px solid ${state.players[state.currentPlayer].id === player.id ? "var(--accent)" : "transparent"}`
           }}
         >
-          <div style={{ fontWeight: 700 }}>{player.name}</div>
+          <div style={{ fontWeight: 700 }}>
+            {player.name} {cpuPlayerIds?.has(player.id) ? "(CPU)" : ""}
+          </div>
           <div>Rubbies: {player.rubbies}</div>
           <div>Indulgences: {player.indulgences}</div>
           <div>Status: {player.alive ? (player.inHell ? "In hell" : "Alive") : "Dead"}</div>

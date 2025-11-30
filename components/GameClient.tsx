@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   GameState,
   applyAfterEffects,
@@ -10,7 +10,10 @@ import {
   recordRoll,
   resolveCurrentSpace,
   resolveHellEscape,
-  startNewSession
+  startNewSession,
+  applyCpuDecision,
+  decideCpuAction,
+  describeCpuRole
 } from "@/lib/game";
 import { PhaseControls } from "./PhaseControls";
 import { PlayerPanel } from "./PlayerPanel";
@@ -23,11 +26,20 @@ function coinFlip() {
   return Math.random() > 0.5;
 }
 
-const defaultPlayers = ["Rizzo", "Scabbers", "Nibble"];
+type PlayerSlot = { name: string; isCPU: boolean };
+
+const defaultPlayers: PlayerSlot[] = [
+  { name: "Rizzo", isCPU: false },
+  { name: "Scabbers", isCPU: false },
+  { name: "Nibble", isCPU: true }
+];
 
 export function GameClient() {
-  const [playerNames, setPlayerNames] = useState(defaultPlayers.join(", "));
-  const [state, setState] = useState<GameState>(() => startNewSession(defaultPlayers));
+  const [playerSlots, setPlayerSlots] = useState<PlayerSlot[]>(defaultPlayers);
+  const [state, setState] = useState<GameState>(() => startNewSession(defaultPlayers.map((slot) => slot.name)));
+  const [cpuPlayerIds, setCpuPlayerIds] = useState<Set<string>>(
+    () => new Set(defaultPlayers.map((slot, index) => (slot.isCPU ? `player-${index + 1}` : null)).filter(Boolean) as string[])
+  );
 
   const activePlayer = useMemo(() => state.players[state.currentPlayer], [state]);
 
@@ -36,11 +48,41 @@ export function GameClient() {
   };
 
   const handleStart = () => {
-    const names = playerNames
-      .split(",")
-      .map((name) => name.trim())
-      .filter(Boolean);
-    setState(startNewSession(names.length ? names : defaultPlayers));
+    const trimmed = playerSlots
+      .map((slot) => ({ ...slot, name: slot.name.trim() }))
+      .filter((slot) => slot.name.length > 0);
+    const effectiveSlots = trimmed.length ? trimmed : defaultPlayers;
+    const names = effectiveSlots.map((slot) => slot.name);
+    const newState = startNewSession(names);
+    const newCpuIds = new Set(
+      newState.players
+        .filter((_, index) => effectiveSlots[index]?.isCPU ?? false)
+        .map((player) => player.id)
+    );
+    setCpuPlayerIds(newCpuIds);
+    setState(newState);
+  };
+
+  useEffect(() => {
+    if (state.status.state === "over") return;
+    const activePlayer = state.players[state.currentPlayer];
+    if (!cpuPlayerIds.has(activePlayer.id)) return;
+    const timer = setTimeout(() => {
+      setState((prev) => applyCpuDecision(prev, decideCpuAction(prev)));
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [cpuPlayerIds, state]);
+
+  const updateSlot = (index: number, updater: (slot: PlayerSlot) => PlayerSlot) => {
+    setPlayerSlots((prev) => prev.map((slot, i) => (i === index ? updater(slot) : slot)));
+  };
+
+  const addSlot = (isCPU: boolean) => {
+    setPlayerSlots((prev) => [...prev, { name: isCPU ? `CPU ${prev.length + 1}` : `Player ${prev.length + 1}`, isCPU }]);
+  };
+
+  const removeSlot = (index: number) => {
+    setPlayerSlots((prev) => prev.filter((_, i) => i !== index));
   };
 
   return (
@@ -55,16 +97,49 @@ export function GameClient() {
             </p>
           )}
         </div>
-        <div style={{ display: "flex", gap: "0.5rem" }}>
-          <input
-            aria-label="Player names"
-            value={playerNames}
-            onChange={(event) => setPlayerNames(event.target.value)}
-            style={{ padding: "0.5rem", borderRadius: 8, border: "1px solid var(--muted)", minWidth: 260 }}
-          />
-          <button onClick={handleStart} style={{ ...buttonStyle, background: "#22d3ee" }}>
-            Start Session
-          </button>
+        <div style={{ display: "grid", gap: "0.5rem" }}>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <button onClick={() => addSlot(false)} style={{ ...buttonStyle, background: "#a5b4fc" }}>
+              Add Human
+            </button>
+            <button onClick={() => addSlot(true)} style={{ ...buttonStyle, background: "#86efac" }}>
+              Add CPU
+            </button>
+            <button onClick={handleStart} style={{ ...buttonStyle, background: "#22d3ee" }}>
+              Start Session
+            </button>
+          </div>
+          <div style={{ display: "grid", gap: "0.5rem" }}>
+            {playerSlots.map((slot, index) => (
+              <div
+                key={index}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "2fr 1fr auto",
+                  alignItems: "center",
+                  gap: "0.5rem"
+                }}
+              >
+                <input
+                  aria-label={`Player ${index + 1} name`}
+                  value={slot.name}
+                  onChange={(event) => updateSlot(index, (prev) => ({ ...prev, name: event.target.value }))}
+                  style={{ padding: "0.5rem", borderRadius: 8, border: "1px solid var(--muted)" }}
+                />
+                <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                  <input
+                    type="checkbox"
+                    checked={slot.isCPU}
+                    onChange={(event) => updateSlot(index, (prev) => ({ ...prev, isCPU: event.target.checked }))}
+                  />
+                  CPU
+                </label>
+                <button onClick={() => removeSlot(index)} style={{ ...buttonStyle, background: "#fca5a5" }}>
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       </header>
 
@@ -72,7 +147,12 @@ export function GameClient() {
         <div style={{ display: "grid", gap: "1rem" }}>
           <div style={{ padding: "1rem", borderRadius: 12, background: "var(--muted)" }}>
             <h2 style={{ marginTop: 0 }}>Turn controls</h2>
-            <p style={{ marginTop: 0 }}>Current rat: {activePlayer.name}</p>
+            <p style={{ marginTop: 0 }}>
+              Current rat: {activePlayer.name} {cpuPlayerIds.has(activePlayer.id) ? "(CPU)" : "(Human)"}
+            </p>
+            {cpuPlayerIds.has(activePlayer.id) && (
+              <p style={{ marginTop: 0, color: "#34d399" }}>CPU role: {describeCpuRole(state)}</p>
+            )}
             <PhaseControls
               state={state}
               onBegin={() => updateState(beginPreMove)}
@@ -82,6 +162,7 @@ export function GameClient() {
               onMove={() => updateState(applyMovement)}
               onResolve={() => updateState(resolveCurrentSpace)}
               onAfter={() => updateState(applyAfterEffects)}
+              cpuActive={cpuPlayerIds.has(activePlayer.id)}
             />
             <div style={{ marginTop: "0.5rem" }}>
               <span style={{ fontWeight: 700 }}>Last roll:</span> {state.lastRoll ?? "n/a"}
@@ -101,7 +182,7 @@ export function GameClient() {
         </div>
         <aside style={{ padding: "1rem", borderRadius: 12, background: "var(--muted)" }}>
           <h2 style={{ marginTop: 0 }}>Players</h2>
-          <PlayerPanel state={state} />
+          <PlayerPanel state={state} cpuPlayerIds={cpuPlayerIds} />
           <div style={{ marginTop: "1rem" }}>
             <div>Jackpot: {state.jackpot}</div>
             <div>Deck remaining: {state.deck.length}</div>
