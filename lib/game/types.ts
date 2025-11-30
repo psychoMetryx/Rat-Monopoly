@@ -25,6 +25,7 @@ export interface BoardSpace {
   cardDraw?: boolean;
   sendTo?: { boardId: string; index: number };
   indulgenceCost?: number;
+  mobThreat?: boolean;
   property?: PropertyDetails;
 }
 
@@ -40,7 +41,7 @@ export interface GoLottoState {
   calledFace?: number;
 }
 
-export type CardKind = "indulgence" | "cash" | "penalty" | "move" | "hell";
+export type CardKind = "indulgence" | "cash" | "penalty" | "move" | "hell" | "mob";
 
 export interface CardDefinition {
   id: string;
@@ -49,6 +50,7 @@ export interface CardDefinition {
   rubbyDelta?: number;
   moveTo?: { boardId: string; index: number };
   sendToHell?: boolean;
+  mobDebt?: boolean;
 }
 
 export interface PlayerState {
@@ -62,6 +64,7 @@ export interface PlayerState {
   jobProtected: boolean;
   hellEscapes: number;
   inHell: boolean;
+  mobDebt: boolean;
   ownedProperties: string[];
   propertyMetadata?: Record<string, { purchasePrice: number }>;
 }

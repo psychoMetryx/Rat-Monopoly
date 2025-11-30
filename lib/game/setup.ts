@@ -21,6 +21,13 @@ const surfaceBoard: BoardDefinition = {
     },
     { id: "draw-1", name: "Sniff a Card", type: "draw", cardDraw: true },
     { id: "job", name: "Job Board", type: "job", rubbyDelta: 100 },
+    {
+      id: "rat-crime-alley",
+      name: "Rat Crime Alley",
+      type: "draw",
+      cardDraw: true,
+      mobThreat: true
+    },
     { id: "hell-gate", name: "Hell Gate", type: "hell-gate", sendTo: { boardId: "hell", index: 0 } },
     {
       id: "property-b",
@@ -28,6 +35,7 @@ const surfaceBoard: BoardDefinition = {
       type: "property",
       property: { price: 180, rent: 45 }
     },
+    { id: "drug-den", name: "Drug Den", type: "draw", cardDraw: true, mobThreat: true },
     { id: "draw-2", name: "Rat Lotto", type: "draw", cardDraw: true },
     { id: "teleport", name: "Subsewer Exit", type: "teleport", sendTo: { boardId: "subsurface", index: 0 } }
   ]
@@ -80,10 +88,16 @@ const defaultDeck: CardDefinition[] = [
     rubbyDelta: -150
   },
   {
+    id: "mob-1",
+    kind: "mob",
+    description: "Rat mob fronts you some product. You owe them until you pay 500 at their turf.",
+    mobDebt: true
+  },
+  {
     id: "move-1",
     kind: "move",
     description: "Shortcut to sewer entrance.",
-    moveTo: { boardId: "surface", index: 6 }
+    moveTo: { boardId: "surface", index: 7 }
   },
   {
     id: "hell-1",
@@ -105,6 +119,7 @@ function buildPlayers(names: string[], startingBoard: BoardDefinition): PlayerSt
     jobProtected: false,
     hellEscapes: 0,
     inHell: false,
+    mobDebt: false,
     ownedProperties: [],
     propertyMetadata: {}
   }));
