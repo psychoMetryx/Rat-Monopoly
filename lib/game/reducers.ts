@@ -166,8 +166,8 @@ function checkWinConditions(state: GameState): GameState {
 
 function resolveCardEffect(state: GameState, card: CardDefinition): GameState {
   let next = state;
-  if (card.rubbyDelta) {
-    next = updatePlayer(next, (player) => ({ ...player, rubbies: Math.max(0, player.rubbies + card.rubbyDelta) }));
+  if (card.rubbyDelta !== undefined) {
+    next = updatePlayer(next, (player) => ({ ...player, rubbies: Math.max(0, player.rubbies + card.rubbyDelta!) }));
     next = enforceBankruptcy(next);
   }
   if (card.kind === "indulgence") {
